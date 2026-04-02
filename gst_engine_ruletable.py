@@ -248,68 +248,67 @@ def apply_rule(row: pd.Series) -> dict:
     base_sec = ["B2B", "CDN", "ECOM", "IMPG", "IMPGSEZ", "ISD"]
     amend_sec = ["B2BA", "CDNA", "ECOMA", "ISDA"]
 
-    if decl == "NONZERO":
-        if itc == "Y":
-            if s in base_sec and inv == "D":
-                if txn == "N" and same == "Y" and moved == "Y":
-                    result.update({"4A5_Original": dv, "4B2_Original": dv, "Rule Applied": 1})
-                    return route_4a_output(row, result)
-                if txn == "N" and same == "Y" and moved == "N":
-                    result.update({"4A5_Original": dv, "4B2_Original": dv, "4D1_Tax": dv, "Rule Applied": 2})
-                    return route_4a_output(row, result)
-                if txn == "Y":
-                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "Rule Applied": 3})
-                    return route_4a_output(row, result)
-                if txn == "N" and same == "N":
-                    result.update({"4A5_Tax": dv, "4B1_Original": dv, "4B2_Original": dv, "4D1_Tax": dv, "Rule Applied": 4})
-                    return route_4a_output(row, result)
+    if itc == "N":
+        if s in base_sec and inv == "D":
+            if txn == "N" and same == "Y" and moved == "Y":
+                result.update({"4A5_Original": dv, "4B2_Original": dv, "Rule Applied": 9})
+                return route_4a_output(row, result)
+            if txn == "N" and same == "Y" and moved == "N":
+                result.update({"4A5_Original": dv, "4B2_Original": dv, "4D1_Tax": dv, "Rule Applied": 10})
+                return route_4a_output(row, result)
+            if txn == "Y":
+                result.update({"4A5_Original": dv, "4A5_Tax": dv, "Rule Applied": 11})
+                return route_4a_output(row, result)
+            if txn == "N" and same == "N":
+                result.update({"4A5_Tax": dv, "4B1_Original": dv, "4B2_Original": dv, "4D1_Tax": dv, "Rule Applied": 12})
+                return route_4a_output(row, result)
 
-            if s in amend_sec:
-                if txn == "N":
-                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Tax": b1, "4B2_Original": dv, "4B2_Tax": b2, "4D1_Tax": dv, "Rule Applied": 5})
-                    return route_4a_output(row, result)
-                if txn == "Y":
-                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 6})
-                    return route_4a_output(row, result)
+        if s in amend_sec:
+            if txn == "N":
+                result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Tax": b1, "4B2_Original": dv, "4B2_Tax": b2, "4D1_Tax": dv, "Rule Applied": 13})
+                return route_4a_output(row, result)
+            if txn == "Y":
+                result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 14})
+                return route_4a_output(row, result)
 
-            if s in base_sec:
-                if txn == "N":
-                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Tax": b1, "4B2_Original": dv, "4B2_Tax": b2, "4D1_Tax": dv, "Rule Applied": 7})
-                    return route_4a_output(row, result)
-                if txn == "Y":
-                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 8})
-                    return route_4a_output(row, result)
+        if s in base_sec:
+            if txn == "N":
+                result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Tax": b1, "4B2_Original": dv, "4B2_Tax": b2, "4D1_Tax": dv, "Rule Applied": 15})
+                return route_4a_output(row, result)
+            if txn == "Y":
+                result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 16})
+                return route_4a_output(row, result)
 
-        if itc == "N":
-            if s in base_sec and inv == "D":
-                if txn == "N" and same == "Y" and moved == "Y":
-                    result.update({"4A5_Original": dv, "4B2_Original": dv, "Rule Applied": 9})
-                    return route_4a_output(row, result)
-                if txn == "N" and same == "Y" and moved == "N":
-                    result.update({"4A5_Original": dv, "4B2_Original": dv, "4D1_Tax": dv, "Rule Applied": 10})
-                    return route_4a_output(row, result)
-                if txn == "Y":
-                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "Rule Applied": 11})
-                    return route_4a_output(row, result)
-                if txn == "N" and same == "N":
-                    result.update({"4A5_Tax": dv, "4B1_Original": dv, "4B2_Original": dv, "4D1_Tax": dv, "Rule Applied": 12})
-                    return route_4a_output(row, result)
+    if decl == "NONZERO" and itc == "Y":
+        if s in base_sec and inv == "D":
+            if txn == "N" and same == "Y" and moved == "Y":
+                result.update({"4A5_Original": dv, "4B2_Original": dv, "Rule Applied": 1})
+                return route_4a_output(row, result)
+            if txn == "N" and same == "Y" and moved == "N":
+                result.update({"4A5_Original": dv, "4B2_Original": dv, "4D1_Tax": dv, "Rule Applied": 2})
+                return route_4a_output(row, result)
+            if txn == "Y":
+                result.update({"4A5_Original": dv, "4A5_Tax": dv, "Rule Applied": 3})
+                return route_4a_output(row, result)
+            if txn == "N" and same == "N":
+                result.update({"4A5_Tax": dv, "4B1_Original": dv, "4B2_Original": dv, "4D1_Tax": dv, "Rule Applied": 4})
+                return route_4a_output(row, result)
 
-            if s in amend_sec:
-                if txn == "N":
-                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Tax": b1, "4B2_Original": dv, "4B2_Tax": b2, "4D1_Tax": dv, "Rule Applied": 13})
-                    return route_4a_output(row, result)
-                if txn == "Y":
-                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 14})
-                    return route_4a_output(row, result)
+        if s in amend_sec:
+            if txn == "N":
+                result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Tax": b1, "4B2_Original": dv, "4B2_Tax": b2, "4D1_Tax": dv, "Rule Applied": 5})
+                return route_4a_output(row, result)
+            if txn == "Y":
+                result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 6})
+                return route_4a_output(row, result)
 
-            if s in base_sec:
-                if txn == "N":
-                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Tax": b1, "4B2_Original": dv, "4B2_Tax": b2, "4D1_Tax": dv, "Rule Applied": 15})
-                    return route_4a_output(row, result)
-                if txn == "Y":
-                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 16})
-                    return route_4a_output(row, result)
+        if s in base_sec:
+            if txn == "N":
+                result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Tax": b1, "4B2_Original": dv, "4B2_Tax": b2, "4D1_Tax": dv, "Rule Applied": 7})
+                return route_4a_output(row, result)
+            if txn == "Y":
+                result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 8})
+                return route_4a_output(row, result)
 
     itc_yes_blank_block = (itc == "BLANK") or (itc == "Y" and decl == "ZERO")
     if itc_yes_blank_block:
