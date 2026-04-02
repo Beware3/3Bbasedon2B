@@ -311,7 +311,8 @@ def apply_rule(row: pd.Series) -> dict:
                     result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 16})
                     return route_4a_output(row, result)
 
-    if decl == "ZERO":
+    itc_yes_blank_block = (itc == "BLANK") or (itc == "Y" and decl == "ZERO")
+    if itc_yes_blank_block:
         if s in base_sec and inv == "D":
             if txn == "N" and same == "Y" and moved == "Y":
                 result.update({"4A5_Original": fv, "4B2_Original": fv, "Rule Applied": 17})
