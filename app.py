@@ -1,76 +1,96 @@
-import streamlit as st
-import pandas as pd
+from __future__ import annotations
+
 from io import BytesIO
 import re
+from typing import Callable
 
-from gst_engine import process_dataframe
+import pandas as pd
 
 
-st.set_page_config(page_title="GST Rule Engine", layout="wide")
-st.title("📊 GST Rule Engine - 4A5 / 4B / 4D")
-@@ -10,418 +12,34 @@
+EXPECTED_HEADERS = [
+    "Section",
+    "ITC Reduction Required",
+    "Invoice Status (My Action)",
+    "GSTR-2B Year",
+    "GSTR-2B Period",
+    "GSTR-2B Original Year",
+    "GSTR-2B Original Period",
+    "Declared IGST",
+    "Declared CGST",
+    "Declared SGST",
+    "Declared Cess",
+    "Original and Amendment in same month",
+    "Amendment moved",
+    "Company Description",
+    "State Description",
+    "GSTIN",
+    "IGST (Amt)",
+    "CGST (Amt)",
+    "SGST/UTGST (Amt)",
+    "Cess (Amt)",
+    "4B1 IGST (Amt)",
+    "4B1 CGST (Amt)",
+    "4B1 SGST (Amt)",
+    "4B1 CESS (Amt)",
+    "4B2 IGST (Amt)",
+    "4B2 CGST (Amt)",
+    "4B2 SGST (Amt)",
+    "4B2 CESS (Amt)",
+    "Delta IGST Amount",
+    "Delta CGST Amount",
+    "Delta SGST/UTGST Amount",
+    "Delta CESS Amount",
+    "Reverse Charge",
+    "ITC Availability",
+    "Note Type (Credit/Debit)",
+]
 
-if uploaded_file:
-file_token = f"{uploaded_file.name}:{uploaded_file.size}"
-    if st.session_state.get('uploaded_file_token') != file_token:
-        st.session_state['uploaded_file_token'] = file_token
-        st.session_state['output_ready'] = False
-        st.session_state['output_bytes'] = None
-        st.session_state['summary_ready'] = False
-        st.session_state['summary_bytes'] = None
-    if st.session_state.get("uploaded_file_token") != file_token:
-        st.session_state["uploaded_file_token"] = file_token
-        st.session_state["output_ready"] = False
-        st.session_state["output_bytes"] = None
-        st.session_state["summary_ready"] = False
-        st.session_state["summary_bytes"] = None
+REQUIRED_COLUMNS = [
+    "Section",
+    "ITC Reduction Required",
+    "Invoice Status (My Action)",
+    "GSTR-2B Year",
+    "GSTR-2B Period",
+    "GSTR-2B Original Year",
+    "GSTR-2B Original Period",
+    "Declared IGST",
+    "Declared CGST",
+    "Declared SGST",
+    "Declared Cess",
+]
 
-df = pd.read_excel(uploaded_file)
+OUT_COLS = [
+    "4A1_Original",
+    "4A3_Original",
+    "4A4_Original",
+    "4A5_Original",
+    "4B1_Original",
+    "4B2_Original",
+    "4D1_Original",
+    "4D2_Original",
+    "4A1_Tax",
+    "4A3_Tax",
+    "4A4_Tax",
+    "4A5_Tax",
+    "4B1_Tax",
+    "4B2_Tax",
+    "4D1_Tax",
+    "4D2_Tax",
+    "Rule Applied",
+]
+
+
+def normalize_header(name: str) -> str:
+    cleaned = re.sub(r"[?]+", "", str(name).strip().lower())
+    cleaned = re.sub(r"\s*\(\s*", "(", cleaned)
+    cleaned = re.sub(r"\s*\)\s*", ")", cleaned)
+    return " ".join(cleaned.split())
+
+
+def canonicalize_columns(df: pd.DataFrame) -> pd.DataFrame:
+    df = df.copy()
     df.columns = df.columns.map(lambda col: str(col).strip())
-
-st.success("✅ File uploaded successfully")
-
-    def normalize_header(name):
-        cleaned = re.sub(r'[?]+', '', str(name).strip().lower())
-        cleaned = re.sub(r'\s*\(\s*', '(', cleaned)
-        cleaned = re.sub(r'\s*\)\s*', ')', cleaned)
-        return ' '.join(cleaned.split())
-
-    expected_headers = [
-        'Section',
-        'ITC Reduction Required',
-        'Invoice Status (My Action)',
-        'GSTR-2B Year',
-        'GSTR-2B Period',
-        'GSTR-2B Original Year',
-        'GSTR-2B Original Period',
-        'Declared IGST',
-        'Declared CGST',
-        'Declared SGST',
-        'Declared Cess',
-        'Original and Amendment in same month',
-        'Amendment moved',
-        'Company Description',
-        'State Description',
-        'GSTIN',
-        'IGST (Amt)',
-        'CGST (Amt)',
-        'SGST/UTGST (Amt)',
-        'Cess (Amt)',
-        '4B1 IGST (Amt)',
-        '4B1 CGST (Amt)',
-        '4B1 SGST (Amt)',
-        '4B1 CESS (Amt)',
-        '4B2 IGST (Amt)',
-        '4B2 CGST (Amt)',
-        '4B2 SGST (Amt)',
-        '4B2 CESS (Amt)',
-        'Delta IGST Amount',
-        'Delta CGST Amount',
-        'Delta SGST/UTGST Amount',
-        'Delta CESS Amount'
-    ]
-    canonical_headers = {normalize_header(col): col for col in expected_headers}
+    canonical_headers = {normalize_header(col): col for col in EXPECTED_HEADERS}
     rename_map = {}
 
     for col in df.columns:
@@ -78,443 +98,409 @@ st.success("✅ File uploaded successfully")
         if normalized in canonical_headers:
             rename_map[col] = canonical_headers[normalized]
 
-    df = df.rename(columns=rename_map)
+    return df.rename(columns=rename_map)
 
-    # -----------------------------
-    # REQUIRED COLUMNS
-    # -----------------------------
-    required_cols = [
-        'Section',
-        'ITC Reduction Required',
-        'Invoice Status (My Action)',
-        'GSTR-2B Year',
-        'GSTR-2B Period',
-        'GSTR-2B Original Year',
-        'GSTR-2B Original Period',
-        'Declared IGST',
-        'Declared CGST',
-        'Declared SGST',
-        'Declared Cess'
-    ]
 
-    missing = [c for c in required_cols if c not in df.columns]
-    if missing:
-        st.error(f"❌ Missing columns: {missing}")
-        st.stop()
+def validate_required_columns(df: pd.DataFrame) -> list[str]:
+    return [col for col in REQUIRED_COLUMNS if col not in df.columns]
 
-    # -----------------------------
-    # NORMALIZATION
-    # -----------------------------
-    def norm_itc(x):
-        if str(x).strip().upper() in ['Y', 'YES']:
-            return 'Y'
-        if str(x).strip() == '' or pd.isna(x):
-            return 'BLANK'
-        return 'N'
 
-    def norm_flag(x):
-        return 'Y' if str(x).strip().upper() == 'Y' else 'N'
+def norm_itc(value) -> str:
+    if str(value).strip().upper() in ["Y", "YES"]:
+        return "Y"
+    if str(value).strip() == "" or pd.isna(value):
+        return "BLANK"
+    return "N"
 
-    def get_flag_series(df, candidates, default='N'):
-        for col in candidates:
-            if col in df.columns:
-                return df[col].fillna(default).apply(norm_flag)
-        return pd.Series([default] * len(df), index=df.index).apply(norm_flag)
 
-    def calc_txn(row):
-        try:
-            current = f"{int(row['GSTR-2B Year'])}{int(row['GSTR-2B Period']):02d}"
-            original = f"{int(row['GSTR-2B Original Year'])}{int(row['GSTR-2B Original Period']):02d}"
-            return 'Y' if current == original else 'N'
-        except:
-            return 'N'
+def norm_flag(value) -> str:
+    return "Y" if str(value).strip().upper() == "Y" else "N"
 
-    def declared_type(x):
-        try:
-            return "NONZERO" if float(x) != 0 else "ZERO"
-        except:
-            return "ZERO"
 
-    # -----------------------------
-    # DECLARED VALUE CALCULATION
-    # -----------------------------
-    for col in ['Declared IGST','Declared CGST','Declared SGST','Declared Cess']:
-        df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+def norm_token(value) -> str:
+    if pd.isna(value):
+        return "BLANK"
+    text = str(value).strip().upper()
+    if text == "":
+        return "BLANK"
+    return text
 
-    df['Declared value (computed)'] = (
-        df['Declared IGST'] +
-        df['Declared CGST'] +
-        df['Declared SGST'] +
-        df['Declared Cess']
-    )
 
-    # -----------------------------
-    # APPLY NORMALIZATION
-    # -----------------------------
-    df['ITC'] = df['ITC Reduction Required'].apply(norm_itc)
-    df['TXN'] = df.apply(calc_txn, axis=1)
+def get_flag_series(df: pd.DataFrame, candidates: list[str], default: str = "N") -> pd.Series:
+    for col in candidates:
+        if col in df.columns:
+            return df[col].fillna(default).apply(norm_flag)
+    return pd.Series([default] * len(df), index=df.index).apply(norm_flag)
 
-    df['SAME'] = get_flag_series(df, ['Original and Amendment in same month'])
-    df['MOVED'] = get_flag_series(df, ['Amendment moved'])
 
-    df['DECL'] = df['Declared value (computed)'].apply(declared_type)
-    df['INV'] = df['Invoice Status (My Action)'].fillna('').astype(str).str.strip()
+def calc_txn(row: pd.Series) -> str:
+    try:
+        current = f"{int(row['GSTR-2B Year'])}{int(row['GSTR-2B Period']):02d}"
+        original = f"{int(row['GSTR-2B Original Year'])}{int(row['GSTR-2B Original Period']):02d}"
+        return "Y" if current == original else "N"
+    except Exception:
+        return "N"
 
-    # -----------------------------
-    # OUTPUT INIT
-    # -----------------------------
-    out_cols = [
-        '4A5_Original',
-        '4B1_Original',
-        '4B2_Original',
-        '4D1_Original',
-        '4A5_Tax',
-        '4B1_Tax',
-        '4B2_Tax',
-        '4D1_Tax',
-        'Rule Applied'
-    ]
 
-    for c in out_cols:
-        df[c] = ""
+def declared_type(value) -> str:
+    try:
+        return "NONZERO" if float(value) != 0 else "ZERO"
+    except Exception:
+        return "ZERO"
 
-    # -----------------------------
-    # RULE ENGINE
-    # -----------------------------
-    def apply_rule(r):
 
-        res = {c:"" for c in out_cols}
-        res['Rule Applied'] = None
+def note_type_matches(section: str, note_type: str, allowed: set[str]) -> bool:
+    if section not in {"CDN", "CDNA"}:
+        return True
+    return note_type in allowed
 
-        s = r['Section']
-        itc = r['ITC']
-        decl = r['DECL']
-        inv = r['INV']
-        txn = r['TXN']
-        same = r['SAME']
-        moved = r['MOVED']
 
-        DV = "Declared Value"
-        FV = "Full Value"
-        DELTA = "Delta Value"
-        B1 = "Column of 4B1"
-        B2 = "Column of 4B2"
+def get_4a_bucket(row: pd.Series) -> str:
+    section = norm_token(row.get("Section"))
+    reverse_charge = norm_token(row.get("Reverse Charge"))
+    itc_availability = norm_token(row.get("ITC Availability"))
+    note_type = norm_token(row.get("Note Type (Credit/Debit)"))
 
-        base_sec = ['B2B','CDN','ECOM','IMPG','IMPGSEZ','ISD']
-        amend_sec = ['B2BA','CDNA','ECOMA','ISDA']
+    itc_allowed = {"Y", "BLANK"}
+    reverse_charge_non_rcm = {"N", "BLANK", "-"}
 
-        # -------- NONZERO --------
-        if decl == 'NONZERO':
+    if section in {"IMPG", "IMPGSEZ", "IMPGA", "IMPGSEZA"} and reverse_charge in reverse_charge_non_rcm and itc_availability in itc_allowed:
+        return "4A1"
 
-            if itc == 'Y':
+    if section in {"ISD", "ISDA"} and reverse_charge in reverse_charge_non_rcm and itc_availability in itc_allowed:
+        return "4A4"
 
-                if s in base_sec and inv == 'D':
+    if section in {"B2B", "B2BA", "ECOM", "ECOMA"} and reverse_charge == "Y" and itc_availability in itc_allowed:
+        return "4A3"
 
-                    if txn=='N' and same=='Y' and moved=='Y':
-                        res.update({'4A5_Original':DV,'4B2_Original':DV,'Rule Applied':1})
-                        return res
+    if section in {"CDN", "CDNA"} and reverse_charge == "Y" and itc_availability in {"Y", "BLANK", "N"} and note_type_matches(section, note_type, {"C", "D"}):
+        return "4A3"
 
-                    if txn=='N' and same=='Y' and moved=='N':
-                        res.update({'4A5_Original':DV,'4B2_Original':DV,'4D1_Tax':DV,'Rule Applied':2})
-                        return res
+    if section in {"B2B", "B2BA", "ECOM", "ECOMA"} and reverse_charge in reverse_charge_non_rcm and itc_availability in itc_allowed:
+        return "4A5"
 
-                    if txn=='Y':
-                        res.update({'4A5_Original':DV,'4A5_Tax':DV,'Rule Applied':3})
-                        return res
+    if section in {"CDN", "CDNA"} and reverse_charge in reverse_charge_non_rcm and itc_availability in {"Y", "BLANK", "N"} and note_type_matches(section, note_type, {"C", "D"}):
+        return "4A5"
 
-                    if txn=='N' and same=='N':
-                        res.update({'4A5_Tax':DV,'4B1_Original':DV,'4B2_Original':DV,'4D1_Tax':DV,'Rule Applied':4})
-                        return res
+    return "4A5"
 
-                if s in amend_sec:
 
-                    if txn=='N':
-                        res.update({'4A5_Original':DV,'4A5_Tax':DV,'4B1_Tax':B1,'4B2_Original':DV,'4B2_Tax':B2,'4D1_Tax':DV,'Rule Applied':5})
-                        return res
+def qualifies_for_4d2(row: pd.Series) -> bool:
+    section = norm_token(row.get("Section"))
+    reverse_charge = norm_token(row.get("Reverse Charge"))
+    itc_availability = norm_token(row.get("ITC Availability"))
+    note_type = norm_token(row.get("Note Type (Credit/Debit)"))
 
-                    if txn=='Y':
-                        res.update({'4A5_Original':DV,'4A5_Tax':DV,'4B1_Original':B1,'4B1_Tax':B1,'4B2_Original':B2,'4B2_Tax':B2,'Rule Applied':6})
-                        return res
+    if section in {"IMPG", "IMPGSEZ", "ISD", "ISDA", "B2B", "B2BA", "ECOM", "ECOMA"}:
+        return reverse_charge in {"N", "BLANK", "Y", "-"} and itc_availability == "N"
 
-                if s in base_sec:
+    if section in {"CDN", "CDNA"}:
+        return reverse_charge in {"N", "BLANK", "Y", "-"} and itc_availability == "N" and note_type == "D"
 
-                    if txn=='N':
-                        res.update({'4A5_Original':DV,'4A5_Tax':DV,'4B1_Tax':B1,'4B2_Original':DV,'4B2_Tax':B2,'4D1_Tax':DV,'Rule Applied':7})
-                        return res
+    return False
 
-                    if txn=='Y':
-                        res.update({'4A5_Original':DV,'4A5_Tax':DV,'4B1_Original':B1,'4B1_Tax':B1,'4B2_Original':B2,'4B2_Tax':B2,'Rule Applied':8})
-                        return res
 
-            if itc == 'N':
+def route_4a_output(row: pd.Series, result: dict) -> dict:
+    bucket = get_4a_bucket(row)
+    routed = result.copy()
 
-                if s in base_sec and inv=='D':
+    original_value = routed.get("4A5_Original", "")
+    tax_value = routed.get("4A5_Tax", "")
+    routed["4A5_Original"] = ""
+    routed["4A5_Tax"] = ""
+    routed[f"{bucket}_Original"] = original_value
+    routed[f"{bucket}_Tax"] = tax_value
+    return routed
 
-                    if txn=='N' and same=='Y' and moved=='Y':
-                        res.update({'4A5_Original':DV,'4B2_Original':DV,'Rule Applied':9})
-                        return res
 
-                    if txn=='N' and same=='Y' and moved=='N':
-                        res.update({'4A5_Original':DV,'4B2_Original':DV,'4D1_Tax':DV,'Rule Applied':10})
-                        return res
+def enrich_4d2_output(row: pd.Series, result: dict) -> dict:
+    enriched = result.copy()
+    if qualifies_for_4d2(row):
+        enriched["4D2_Original"] = "Full Amount"
+        enriched["4D2_Tax"] = "Full Amount"
+    return enriched
 
-                    if txn=='Y':
-                        res.update({'4A5_Original':DV,'4A5_Tax':DV,'Rule Applied':11})
-                        return res
 
-                    if txn=='N' and same=='N':
-                        res.update({'4A5_Tax':DV,'4B1_Original':DV,'4B2_Original':DV,'4D1_Tax':DV,'Rule Applied':12})
-                        return res
+def apply_rule(row: pd.Series) -> dict:
+    result = {col: "" for col in OUT_COLS}
+    result["Rule Applied"] = None
 
-                if s in amend_sec:
+    if qualifies_for_4d2(row):
+        result["4D2_Original"] = "Full Amount"
+        result["4D2_Tax"] = "Full Amount"
+        result["Rule Applied"] = "4D2"
+        return result
 
-                    if txn=='N':
-                        res.update({'4A5_Original':DV,'4A5_Tax':DV,'4B1_Tax':B1,'4B2_Original':DV,'4B2_Tax':B2,'4D1_Tax':DV,'Rule Applied':13})
-                        return res
+    s = row["Section"]
+    itc = row["ITC"]
+    decl = row["DECL"]
+    inv = row["INV"]
+    txn = row["TXN"]
+    same = row["SAME"]
+    moved = row["MOVED"]
 
-                    if txn=='Y':
-                        res.update({'4A5_Original':DV,'4A5_Tax':DV,'4B1_Original':B1,'4B1_Tax':B1,'4B2_Original':B2,'4B2_Tax':B2,'Rule Applied':14})
-                        return res
+    dv = "Declared Value"
+    fv = "Full Value"
+    delta = "Delta Value"
+    b1 = "Column of 4B1"
+    b2 = "Column of 4B2"
 
-                if s in base_sec:
+    base_sec = ["B2B", "CDN", "ECOM", "IMPG", "IMPGSEZ", "ISD"]
+    amend_sec = ["B2BA", "CDNA", "ECOMA", "ISDA"]
 
-                    if txn=='N':
-                        res.update({'4A5_Original':DV,'4A5_Tax':DV,'4B1_Tax':B1,'4B2_Original':DV,'4B2_Tax':B2,'4D1_Tax':DV,'Rule Applied':15})
-                        return res
-
-                    if txn=='Y':
-                        res.update({'4A5_Original':DV,'4A5_Tax':DV,'4B1_Original':B1,'4B1_Tax':B1,'4B2_Original':B2,'4B2_Tax':B2,'Rule Applied':16})
-                        return res
-
-        # -------- ZERO --------
-        if decl == 'ZERO':
-
-            if s in base_sec and inv=='D':
-
-                if txn=='N' and same=='Y' and moved=='Y':
-                    res.update({'4A5_Original':FV,'4B2_Original':FV,'Rule Applied':17})
-                    return res
-
-                if txn=='N' and same=='Y' and moved=='N':
-                    res.update({'4A5_Original':FV,'4B2_Original':FV,'4D1_Tax':FV,'Rule Applied':18})
-                    return res
-
-                if txn=='Y':
-                    res.update({'4A5_Original':FV,'4A5_Tax':FV,'Rule Applied':19})
-                    return res
-
-                if txn=='N' and same=='N':
-                    res.update({'4A5_Tax':FV,'4B1_Original':FV,'4B2_Original':FV,'4D1_Tax':FV,'Rule Applied':20})
-                    return res
+    if decl == "NONZERO":
+        if itc == "Y":
+            if s in base_sec and inv == "D":
+                if txn == "N" and same == "Y" and moved == "Y":
+                    result.update({"4A5_Original": dv, "4B2_Original": dv, "Rule Applied": 1})
+                    return route_4a_output(row, result)
+                if txn == "N" and same == "Y" and moved == "N":
+                    result.update({"4A5_Original": dv, "4B2_Original": dv, "4D1_Tax": dv, "Rule Applied": 2})
+                    return route_4a_output(row, result)
+                if txn == "Y":
+                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "Rule Applied": 3})
+                    return route_4a_output(row, result)
+                if txn == "N" and same == "N":
+                    result.update({"4A5_Tax": dv, "4B1_Original": dv, "4B2_Original": dv, "4D1_Tax": dv, "Rule Applied": 4})
+                    return route_4a_output(row, result)
 
             if s in amend_sec:
-
-                if txn=='N' and same=='Y':
-                    res.update({'4A5_Original':DELTA,'4A5_Tax':FV,'4B1_Tax':B1,'4B2_Original':DELTA,'4B2_Tax':B2,'4D1_Tax':FV,'Rule Applied':21})
-                    return res
-
-                if txn=='N':
-                    res.update({'4A5_Original':DELTA,'4A5_Tax':DELTA,'4B1_Tax':B1,'4B2_Original':DELTA,'4B2_Tax':B2,'4D1_Tax':DELTA,'Rule Applied':22})
-                    return res
-
-                if txn=='Y' and same=='Y':
-                    res.update({'4A5_Original':FV,'4A5_Tax':FV,'4B1_Original':B1,'4B1_Tax':B1,'4B2_Original':B2,'4B2_Tax':B2,'Rule Applied':23})
-                    return res
-
-                if txn=='Y':
-                    res.update({'4A5_Original':DV,'4A5_Tax':DV,'4B1_Original':B1,'4B1_Tax':B1,'4B2_Original':B2,'4B2_Tax':B2,'Rule Applied':24})
-                    return res
+                if txn == "N":
+                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Tax": b1, "4B2_Original": dv, "4B2_Tax": b2, "4D1_Tax": dv, "Rule Applied": 5})
+                    return route_4a_output(row, result)
+                if txn == "Y":
+                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 6})
+                    return route_4a_output(row, result)
 
             if s in base_sec:
+                if txn == "N":
+                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Tax": b1, "4B2_Original": dv, "4B2_Tax": b2, "4D1_Tax": dv, "Rule Applied": 7})
+                    return route_4a_output(row, result)
+                if txn == "Y":
+                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 8})
+                    return route_4a_output(row, result)
 
-                if txn=='N':
-                    res.update({'4A5_Original':FV,'4A5_Tax':FV,'4B1_Tax':B1,'4B2_Original':FV,'4B2_Tax':B2,'4D1_Tax':FV,'Rule Applied':25})
-                    return res
+        if itc == "N":
+            if s in base_sec and inv == "D":
+                if txn == "N" and same == "Y" and moved == "Y":
+                    result.update({"4A5_Original": dv, "4B2_Original": dv, "Rule Applied": 9})
+                    return route_4a_output(row, result)
+                if txn == "N" and same == "Y" and moved == "N":
+                    result.update({"4A5_Original": dv, "4B2_Original": dv, "4D1_Tax": dv, "Rule Applied": 10})
+                    return route_4a_output(row, result)
+                if txn == "Y":
+                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "Rule Applied": 11})
+                    return route_4a_output(row, result)
+                if txn == "N" and same == "N":
+                    result.update({"4A5_Tax": dv, "4B1_Original": dv, "4B2_Original": dv, "4D1_Tax": dv, "Rule Applied": 12})
+                    return route_4a_output(row, result)
 
-                if txn=='Y':
-                    res.update({'4A5_Original':FV,'4A5_Tax':FV,'4B1_Original':B1,'4B1_Tax':B1,'4B2_Original':B2,'4B2_Tax':B2,'Rule Applied':26})
-                    return res
+            if s in amend_sec:
+                if txn == "N":
+                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Tax": b1, "4B2_Original": dv, "4B2_Tax": b2, "4D1_Tax": dv, "Rule Applied": 13})
+                    return route_4a_output(row, result)
+                if txn == "Y":
+                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 14})
+                    return route_4a_output(row, result)
 
-        return res
+            if s in base_sec:
+                if txn == "N":
+                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Tax": b1, "4B2_Original": dv, "4B2_Tax": b2, "4D1_Tax": dv, "Rule Applied": 15})
+                    return route_4a_output(row, result)
+                if txn == "Y":
+                    result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 16})
+                    return route_4a_output(row, result)
 
-    def build_phase_two_summary(detail_df):
-        summary_columns = [
-            'Company Description',
-            'State Description',
-            'GSTIN',
-            '3B Table',
-            'Value for Table',
-            'Sum of IGST',
-            'Sum of CGST',
-            'Sum of SGST/ UTGST',
-            'Sum of Cess Amount',
-        ]
-        output_to_table = {
-            '4A5_Tax': '4A5',
-            '4B1_Tax': '4B1',
-            '4B2_Tax': '4B2',
-            '4D1_Tax': '4D1',
-        }
-        value_source_map = {
-            'Full Value': ('IGST (Amt)', 'CGST (Amt)', 'SGST/UTGST (Amt)', 'Cess (Amt)'),
-            'Declared Value': ('Declared IGST', 'Declared CGST', 'Declared SGST', 'Declared Cess'),
-            'Delta Value': ('Delta IGST Amount', 'Delta CGST Amount', 'Delta SGST/UTGST Amount', 'Delta CESS Amount'),
-            'Column of 4B1': ('4B1 IGST (Amt)', '4B1 CGST (Amt)', '4B1 SGST (Amt)', '4B1 CESS (Amt)'),
-            'Column of 4B2': ('4B2 IGST (Amt)', '4B2 CGST (Amt)', '4B2 SGST (Amt)', '4B2 CESS (Amt)'),
-        }
-        value_label_map = {
-            'Full Value': 'Full Value',
-            'Declared Value': 'Declared Value',
-            'Delta Value': 'Delta Value',
-            'Column of 4B1': 'Amount of 4B1',
-            'Column of 4B2': 'Amount of 4B2',
-        }
-        records = []
-        working_df = detail_df.copy()
+    itc_yes_blank_block = (itc == "BLANK") or (itc == "Y" and decl == "ZERO")
+    if itc_yes_blank_block:
+        if s in base_sec and inv == "D":
+            if txn == "N" and same == "Y" and moved == "Y":
+                result.update({"4A5_Original": fv, "4B2_Original": fv, "Rule Applied": 17})
+                return route_4a_output(row, result)
+            if txn == "N" and same == "Y" and moved == "N":
+                result.update({"4A5_Original": fv, "4B2_Original": fv, "4D1_Tax": fv, "Rule Applied": 18})
+                return route_4a_output(row, result)
+            if txn == "Y":
+                result.update({"4A5_Original": fv, "4A5_Tax": fv, "Rule Applied": 19})
+                return route_4a_output(row, result)
+            if txn == "N" and same == "N":
+                result.update({"4A5_Tax": fv, "4B1_Original": fv, "4B2_Original": fv, "4D1_Tax": fv, "Rule Applied": 20})
+                return route_4a_output(row, result)
 
-        for col in ['Company Description', 'State Description', 'GSTIN']:
+        if s in amend_sec:
+            if txn == "N" and same == "Y":
+                result.update({"4A5_Original": delta, "4A5_Tax": fv, "4B1_Tax": b1, "4B2_Original": delta, "4B2_Tax": b2, "4D1_Tax": fv, "Rule Applied": 21})
+                return route_4a_output(row, result)
+            if txn == "N":
+                result.update({"4A5_Original": delta, "4A5_Tax": delta, "4B1_Tax": b1, "4B2_Original": delta, "4B2_Tax": b2, "4D1_Tax": delta, "Rule Applied": 22})
+                return route_4a_output(row, result)
+            if txn == "Y" and same == "Y":
+                result.update({"4A5_Original": fv, "4A5_Tax": fv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 23})
+                return route_4a_output(row, result)
+            if txn == "Y":
+                result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 24})
+                return route_4a_output(row, result)
+
+        if s in base_sec:
+            if txn == "N":
+                result.update({"4A5_Original": fv, "4A5_Tax": fv, "4B1_Tax": b1, "4B2_Original": fv, "4B2_Tax": b2, "4D1_Tax": fv, "Rule Applied": 25})
+                return route_4a_output(row, result)
+            if txn == "Y":
+                result.update({"4A5_Original": fv, "4A5_Tax": fv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 26})
+                return route_4a_output(row, result)
+
+    return route_4a_output(row, result)
+
+
+def build_phase_two_summary(detail_df: pd.DataFrame) -> pd.DataFrame:
+    summary_columns = [
+        "Company Description",
+        "State Description",
+        "GSTIN",
+        "3B Table",
+        "Value for Table",
+        "Sum of IGST",
+        "Sum of CGST",
+        "Sum of SGST/ UTGST",
+        "Sum of Cess Amount",
+    ]
+    output_to_table = {
+        "4A1_Tax": "4A1",
+        "4A3_Tax": "4A3",
+        "4A4_Tax": "4A4",
+        "4A5_Tax": "4A5",
+        "4B1_Tax": "4B1",
+        "4B2_Tax": "4B2",
+        "4D1_Tax": "4D1",
+        "4D2_Tax": "4D2",
+    }
+    value_source_map = {
+        "Full Value": ("IGST (Amt)", "CGST (Amt)", "SGST/UTGST (Amt)", "Cess (Amt)"),
+        "Full Amount": ("IGST (Amt)", "CGST (Amt)", "SGST/UTGST (Amt)", "Cess (Amt)"),
+        "Declared Value": ("Declared IGST", "Declared CGST", "Declared SGST", "Declared Cess"),
+        "Delta Value": ("Delta IGST Amount", "Delta CGST Amount", "Delta SGST/UTGST Amount", "Delta CESS Amount"),
+        "Column of 4B1": ("4B1 IGST (Amt)", "4B1 CGST (Amt)", "4B1 SGST (Amt)", "4B1 CESS (Amt)"),
+        "Column of 4B2": ("4B2 IGST (Amt)", "4B2 CGST (Amt)", "4B2 SGST (Amt)", "4B2 CESS (Amt)"),
+    }
+    value_label_map = {
+        "Full Value": "Full Value",
+        "Full Amount": "Full Amount",
+        "Declared Value": "Declared Value",
+        "Delta Value": "Delta Value",
+        "Column of 4B1": "Amount of 4B1",
+        "Column of 4B2": "Amount of 4B2",
+    }
+    records = []
+    working_df = detail_df.copy()
+
+    for col in ["Company Description", "State Description", "GSTIN"]:
+        if col not in working_df.columns:
+            working_df[col] = ""
+
+    for source_cols in value_source_map.values():
+        for col in source_cols:
             if col not in working_df.columns:
-                working_df[col] = ''
+                working_df[col] = 0
 
-        for source_cols in value_source_map.values():
-            for col in source_cols:
-                if col not in working_df.columns:
-                    working_df[col] = 0
+    for output_col, table_name in output_to_table.items():
+        labels = working_df[output_col].fillna("").astype(str).str.strip()
+        matched_rows = working_df.loc[labels != ""].copy()
+        if matched_rows.empty:
+            continue
 
-        for output_col, table_name in output_to_table.items():
-            labels = working_df[output_col].fillna('').astype(str).str.strip()
-            matched_rows = working_df.loc[labels != ''].copy()
-            if matched_rows.empty:
+        matched_rows["_value_label_raw"] = labels.loc[matched_rows.index]
+        for raw_value, value_group in matched_rows.groupby("_value_label_raw"):
+            source_cols = value_source_map.get(raw_value)
+            value_label = value_label_map.get(raw_value)
+            if not source_cols or not value_label:
                 continue
 
-            matched_rows['_value_label_raw'] = labels.loc[matched_rows.index]
-            for raw_value, value_group in matched_rows.groupby('_value_label_raw'):
-                source_cols = value_source_map.get(raw_value)
-                value_label = value_label_map.get(raw_value)
-                if not source_cols or not value_label:
-                    continue
+            summary_frame = value_group[["Company Description", "State Description", "GSTIN"]].copy()
+            summary_frame["3B Table"] = table_name
+            summary_frame["Value for Table"] = value_label
+            summary_frame["Sum of IGST"] = pd.to_numeric(working_df.loc[value_group.index, source_cols[0]], errors="coerce").fillna(0)
+            summary_frame["Sum of CGST"] = pd.to_numeric(working_df.loc[value_group.index, source_cols[1]], errors="coerce").fillna(0)
+            summary_frame["Sum of SGST/ UTGST"] = pd.to_numeric(working_df.loc[value_group.index, source_cols[2]], errors="coerce").fillna(0)
+            summary_frame["Sum of Cess Amount"] = pd.to_numeric(working_df.loc[value_group.index, source_cols[3]], errors="coerce").fillna(0)
+            records.append(summary_frame)
 
-                summary_frame = value_group[['Company Description', 'State Description', 'GSTIN']].copy()
-                summary_frame['3B Table'] = table_name
-                summary_frame['Value for Table'] = value_label
-                summary_frame['Sum of IGST'] = pd.to_numeric(working_df.loc[value_group.index, source_cols[0]], errors='coerce').fillna(0)
-                summary_frame['Sum of CGST'] = pd.to_numeric(working_df.loc[value_group.index, source_cols[1]], errors='coerce').fillna(0)
-                summary_frame['Sum of SGST/ UTGST'] = pd.to_numeric(working_df.loc[value_group.index, source_cols[2]], errors='coerce').fillna(0)
-                summary_frame['Sum of Cess Amount'] = pd.to_numeric(working_df.loc[value_group.index, source_cols[3]], errors='coerce').fillna(0)
-                records.append(summary_frame)
+    if not records:
+        return pd.DataFrame(columns=summary_columns)
 
-        if not records:
-            return pd.DataFrame(columns=summary_columns)
+    summary_df = pd.concat(records, ignore_index=True)
+    summary_df = summary_df.groupby(
+        ["Company Description", "State Description", "GSTIN", "3B Table", "Value for Table"],
+        as_index=False,
+    ).sum()
+    return summary_df[summary_columns]
 
-        summary_df = pd.concat(records, ignore_index=True)
-        summary_df = summary_df.groupby(
-            ['Company Description', 'State Description', 'GSTIN', '3B Table', 'Value for Table'],
-            as_index=False
-        ).sum()
-        return summary_df[summary_columns]
 
-generate = st.button("Generate Calculation", type="primary")
+def prepare_input_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    df = canonicalize_columns(df)
+    missing = validate_required_columns(df)
+    if missing:
+        raise ValueError(f"Missing columns: {missing}")
 
-download_button_placeholder = st.empty()
-summary_button_placeholder = st.empty()
-    if st.session_state.get('output_ready', False) and st.session_state.get('output_bytes'):
+    working_df = df.copy()
 
-    if st.session_state.get("output_ready", False) and st.session_state.get("output_bytes"):
-download_button_placeholder.download_button(
-"⬇ Download Output",
-            data=st.session_state['output_bytes'],
-            data=st.session_state["output_bytes"],
-file_name="output.xlsx",
-)
-else:
-download_button_placeholder.info("Generate the calculation to enable output download.")
+    for optional_text_col in ["Reverse Charge", "ITC Availability", "Note Type (Credit/Debit)"]:
+        if optional_text_col not in working_df.columns:
+            working_df[optional_text_col] = ""
 
-    if st.session_state.get('summary_ready', False) and st.session_state.get('summary_bytes'):
-    if st.session_state.get("summary_ready", False) and st.session_state.get("summary_bytes"):
-summary_button_placeholder.download_button(
-"⬇ Download Summary Output",
-            data=st.session_state['summary_bytes'],
-            data=st.session_state["summary_bytes"],
-file_name="summary_output.xlsx",
-)
-else:
-@@ -431,57 +49,48 @@ def build_phase_two_summary(detail_df):
-progress_banner = st.info("Calculation is in progress. Expected time: a few seconds.")
-progress_bar = st.progress(0, text="Calculation progress: 0%")
+    for col in ["Declared IGST", "Declared CGST", "Declared SGST", "Declared Cess"]:
+        working_df[col] = pd.to_numeric(working_df[col], errors="coerce").fillna(0)
 
-        # -----------------------------
-        # APPLY RULES
-        # -----------------------------
-try:
-            with st.spinner("Generating calculation file..."):
-                results = []
-                total_rows = len(df)
+    working_df["Declared value (computed)"] = (
+        working_df["Declared IGST"]
+        + working_df["Declared CGST"]
+        + working_df["Declared SGST"]
+        + working_df["Declared Cess"]
+    )
 
-                for idx, (_, row) in enumerate(df.iterrows(), start=1):
-                    results.append(apply_rule(row))
-                    progress_pct = int(idx * 100 / total_rows) if total_rows else 100
-                    progress_bar.progress(
-                        progress_pct,
-                        text=f"Calculation progress: {progress_pct}% ({idx}/{total_rows} rows)",
-                    )
-            def update_progress(current: int, total: int) -> None:
-                progress_pct = int(current * 100 / total) if total else 100
-                progress_bar.progress(
-                    progress_pct,
-                    text=f"Calculation progress: {progress_pct}% ({current}/{total} rows)",
-                )
+    working_df["ITC"] = working_df["ITC Reduction Required"].apply(norm_itc)
+    working_df["TXN"] = working_df.apply(calc_txn, axis=1)
+    working_df["SAME"] = get_flag_series(working_df, ["Original and Amendment in same month"])
+    working_df["MOVED"] = get_flag_series(working_df, ["Amendment moved"])
+    working_df["DECL"] = working_df["Declared value (computed)"].apply(declared_type)
+    working_df["INV"] = working_df["Invoice Status (My Action)"].fillna("").astype(str).str.strip()
 
-                result = pd.DataFrame(results, index=df.index)
-                df[out_cols] = result[out_cols]
-            with st.spinner("Generating calculation file..."):
-                detail_df, summary_df = process_dataframe(df, progress_callback=update_progress)
+    for col in OUT_COLS:
+        working_df[col] = ""
 
-output_buffer = BytesIO()
-                df.to_excel(output_buffer, index=False)
-                st.session_state['output_bytes'] = output_buffer.getvalue()
-                st.session_state['output_ready'] = True
-                detail_df.to_excel(output_buffer, index=False)
-                st.session_state["output_bytes"] = output_buffer.getvalue()
-                st.session_state["output_ready"] = True
+    return working_df
 
-                summary_df = build_phase_two_summary(df)
-summary_buffer = BytesIO()
-                summary_df.to_excel(summary_buffer, index=False, sheet_name='GSTR_2B_Table_4_Summary')
-                st.session_state['summary_bytes'] = summary_buffer.getvalue()
-                st.session_state['summary_ready'] = True
-                summary_df.to_excel(summary_buffer, index=False, sheet_name="GSTR_2B_Table_4_Summary")
-                st.session_state["summary_bytes"] = summary_buffer.getvalue()
-                st.session_state["summary_ready"] = True
 
-download_button_placeholder.download_button(
-"⬇ Download Output",
-                    data=st.session_state['output_bytes'],
-                    data=st.session_state["output_bytes"],
-file_name="output.xlsx",
-)
-summary_button_placeholder.download_button(
-"⬇ Download Summary Output",
-                    data=st.session_state['summary_bytes'],
-                    data=st.session_state["summary_bytes"],
-file_name="summary_output.xlsx",
-)
+def process_dataframe(
+    df: pd.DataFrame,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    working_df = prepare_input_dataframe(df)
+    results = []
+    total_rows = len(working_df)
 
-progress_banner.success("Calculation completed. File is ready to download.")
-            progress_bar.progress(100, text=f"Calculation progress: 100% ({len(df)}/{len(df)} rows)")
-            progress_bar.progress(100, text=f"Calculation progress: 100% ({len(detail_df)}/{len(detail_df)} rows)")
-st.success("✅ Rules applied successfully")
-            st.dataframe(df.head(50), use_container_width=True)
-            st.dataframe(detail_df.head(50), use_container_width=True)
+    for idx, (_, row) in enumerate(working_df.iterrows(), start=1):
+        results.append(apply_rule(row))
+        if progress_callback is not None:
+            progress_callback(idx, total_rows)
 
-except Exception as e:
-            st.session_state['output_ready'] = False
-            st.session_state['output_bytes'] = None
-            st.session_state['summary_ready'] = False
-            st.session_state['summary_bytes'] = None
-            st.session_state["output_ready"] = False
-            st.session_state["output_bytes"] = None
-            st.session_state["summary_ready"] = False
-            st.session_state["summary_bytes"] = None
-download_button_placeholder.info("Generate the calculation to enable output download.")
-summary_button_placeholder.info("Generate the calculation to enable summary download.")
-progress_banner.error("Calculation failed.")
+    result_df = pd.DataFrame(results, index=working_df.index)
+    working_df[OUT_COLS] = result_df[OUT_COLS]
+    summary_df = build_phase_two_summary(working_df)
+    return working_df, summary_df
+
+
+def dataframe_to_excel_bytes(df: pd.DataFrame, sheet_name: str) -> bytes:
+    buffer = BytesIO()
+    df.to_excel(buffer, index=False, sheet_name=sheet_name)
+    return buffer.getvalue()
+
+
+def process_excel_bytes(
+    file_bytes: bytes,
+    progress_callback: Callable[[int, int], None] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame, bytes, bytes]:
+    input_df = pd.read_excel(BytesIO(file_bytes))
+    detail_df, summary_df = process_dataframe(input_df, progress_callback=progress_callback)
+    detail_bytes = dataframe_to_excel_bytes(detail_df, "Detailed Output")
+    summary_bytes = dataframe_to_excel_bytes(summary_df, "GSTR_2B_Table_4_Summary")
+    return detail_df, summary_df, detail_bytes, summary_bytes
