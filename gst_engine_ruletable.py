@@ -337,7 +337,7 @@ def apply_rule(row: pd.Series) -> dict:
                 result.update({"4A5_Original": fv, "4A5_Tax": fv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 23})
                 return route_4a_output(row, result)
             if txn == "Y":
-                result.update({"4A5_Original": dv, "4A5_Tax": dv, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 24})
+                result.update({"4A5_Original": delta, "4A5_Tax": delta, "4B1_Original": b1, "4B1_Tax": b1, "4B2_Original": b2, "4B2_Tax": b2, "Rule Applied": 24})
                 return route_4a_output(row, result)
 
         if s in base_sec:
